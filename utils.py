@@ -2,11 +2,24 @@ import chess
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
-# local imports
-from dataset import ChessDataset
+
+def plot_loss_over_epochs(model_path):
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    checkpoint = torch.load(model_path, map_location=device)
+    epoch_num = checkpoint['epoch']
+    losses = checkpoint['loss_values']
+    print("Model successfully loaded!")
+    assert epoch_num == len(losses)
+    losses_n = [loss.item() for loss in losses]
+    fig, ax = plt.subplots()
+    ax.plot(range(len(losses_n)), losses_n)
+    ax.set_title('Losses over epochs')
+    ax.set_ylabel('Loss (MSE)')
+    ax.set_xlabel('Epoch')
+    plt.show()
 
 
 def calculate_validation_loss_epoch(model, device, val_loader):
@@ -22,37 +35,6 @@ def calculate_validation_loss_epoch(model, device, val_loader):
     return sum(losses)/len(losses) if losses else 0
 
 
-def get_loaders(
-        root_dir,
-        batch_size,
-        train_transform,
-        val_transform,
-        num_workers=4,
-        pin_memory=True,
-):
-    # TODO: implement ChessDataset in dataset.py
-    train_ds = ChessDataset(transform=train_transform, target_transform=train_transform)
-
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=True,
-    )
-
-    val_ds = ChessDataset(transform=val_transform, target_transform=val_transform)
-
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=False,
-    )
-
-    return train_loader, val_loader
-
 
 def bitboards_to_array(bb: np.ndarray) -> np.ndarray:
     bb = np.asarray(bb, dtype=np.uint64)[:, np.newaxis]
@@ -60,6 +42,7 @@ def bitboards_to_array(bb: np.ndarray) -> np.ndarray:
     b = (bb >> s).astype(np.uint8)
     b = np.unpackbits(b, bitorder="little")
     return b.reshape(-1, 8, 8)
+
 
 def fen_to_vector(fen_string):
     """
