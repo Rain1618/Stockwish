@@ -1,9 +1,25 @@
 import chess
 import numpy as np
+import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 # local imports
 from dataset import ChessDataset
+
+
+def calculate_validation_loss_epoch(model, device, val_loader):
+    loop = tqdm(val_loader)
+    losses = []
+
+    with torch.no_grad():
+        for batch_idx, (data, target) in enumerate(loop):
+            data, target = data.to(device), target.to(device)
+            predictions = model(data)
+            loss = nn.MSELoss()(predictions, target)
+            losses.append(loss)
+    return sum(losses)/len(losses) if losses else 0
 
 
 def get_loaders(

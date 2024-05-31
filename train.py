@@ -7,7 +7,7 @@ import torch.optim as optim
 
 # local imports
 from model import StockwishEvalMLP
-from utils import get_loaders
+from utils import get_loaders, calculate_validation_loss_epoch
 
 # Hyper parameters
 LEARNING_RATE = 1e-3
@@ -35,11 +35,11 @@ losses = []
 Does one epoch of training.
 """
 
-def train(loader, model, optimizer, loss_fn, scaler):
+def train(train_loader, val_loader, model, optimizer, loss_fn, scaler):
     global epoch_num
     global losses
 
-    loop = tqdm(loader)
+    loop = tqdm(train_loader)
 
     for batch_idx, (data, targets) in enumerate(loop):
         data = data.to(device=DEVICE)
@@ -68,7 +68,10 @@ def train(loader, model, optimizer, loss_fn, scaler):
         'epoch': epoch_num,
         'loss_values': losses,
     }, MODEL_PATH)
-    print("Epoch completed and model successfully saved!")
+
+    # we should keep track of our validation losses as well
+    loss = calculate_validation_loss_epoch(model, DEVICE, val_loader)
+    print(f"Epoch {epoch_num} completed. Validation loss: {loss}. Model successfully saved!")
 
 
 def main():
@@ -98,7 +101,7 @@ def main():
 
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(NUM_EPOCHS - epoch_num):
-        train(train_loader, model, optimizer, loss_fn, scaler)
+        train(train_loader, val_loader, model, optimizer, loss_fn, scaler)
 
 
 if __name__ == '__main__':
