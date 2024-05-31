@@ -61,7 +61,7 @@ def bitboards_to_array(bb: np.ndarray) -> np.ndarray:
     b = np.unpackbits(b, bitorder="little")
     return b.reshape(-1, 8, 8)
 
-def fen_to_array(fen_string):
+def fen_to_vector(fen_string):
     """
     Converts a FEN string to a 768-bit bitboard vector representation.
 
@@ -69,7 +69,7 @@ def fen_to_array(fen_string):
         fen_string: The FEN string representing the chess position.
 
     Returns:
-        A 12 x 8 x 8 numpy array representing the bitboard vector.
+        A (768,0) size vector representing the chess position
     """
     board = chess.Board(fen_string)
 
@@ -90,11 +90,9 @@ def fen_to_array(fen_string):
         white & board.kings,
         ], dtype=np.uint64)
 
-    board_array = bitboards_to_array(bitboards)
-    print(board_array.shape)
-    return board_array
+    board_array = bitboards_to_array(bitboards) # 12 x 8 x 8
 
-def array_to_vec(board_array):
     arr = board_array.reshape(1, 768)
+    arr = arr[0]
 
     return arr
