@@ -1,14 +1,13 @@
 import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 
 # local imports
-from dataset import ChessDataset
 from model import StockwishEvalMLP
+from utils import get_loaders
 
 # Hyper parameters
 LEARNING_RATE = 1e-3
@@ -32,42 +31,9 @@ epoch_num = 0
 losses = []
 
 
-def get_loaders(
-        root_dir,
-        batch_size,
-        train_transform,
-        val_transform,
-        num_workers=4,
-        pin_memory=True,
-):
-    # TODO: implement ChessDataset in dataset.py
-    train_ds = ChessDataset(transform=train_transform, target_transform=train_transform)
-
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=True,
-    )
-
-    val_ds = ChessDataset(transform=val_transform, target_transform=val_transform)
-
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=False,
-    )
-
-    return train_loader, val_loader
-
-
 """ 
 Does one epoch of training.
 """
-
 
 def train(loader, model, optimizer, loss_fn, scaler):
     global epoch_num
