@@ -9,7 +9,7 @@ import torch.optim as optim
 
 # local imports
 from model import StockwishEvalMLP
-from dataset import ChessDataset
+from dataset import ChessDataset, Split
 from utils import calculate_validation_loss_epoch
 
 # Hyper parameters
@@ -22,7 +22,7 @@ NUM_WORKERS = 2
 NUM_EPOCHS = 40
 PIN_MEMORY = True
 LOAD_MODEL = False
-ROOT_DIR = "data.csv"
+ROOT_DIR = "data"
 MODEL_PATH = "drive/MyDrive/model_chess.pth"
 
 # Model specific params
@@ -42,7 +42,7 @@ def get_loaders(
         pin_memory=True,
 ):
 
-    train_ds = ChessDataset(root_path=root_dir, transform=train_transform, target_transform=target_transform)
+    train_ds = ChessDataset(root_path=root_dir, transform=train_transform, target_transform=target_transform, split=Split.TRAIN)
 
     train_loader = DataLoader(
         train_ds,
@@ -52,7 +52,7 @@ def get_loaders(
         shuffle=True,
     )
 
-    val_ds = ChessDataset(root_path=root_dir, transform=train_transform, target_transform=target_transform)
+    val_ds = ChessDataset(root_path=root_dir, transform=train_transform, target_transform=target_transform, split=Split.VALID)
 
     val_loader = DataLoader(
         val_ds,
@@ -106,8 +106,8 @@ def train(train_loader, val_loader, model, optimizer, loss_fn, scaler):
     }, MODEL_PATH)
 
     # we should keep track of our validation losses as well
-    #loss = calculate_validation_loss_epoch(model, DEVICE, val_loader)
-    print(f"Epoch {epoch_num} completed. Avg. training loss: {avg_epoch_loss}. Model successfully saved!")
+    loss = calculate_validation_loss_epoch(model, DEVICE, val_loader)
+    print(f"Epoch {epoch_num} completed. Avg. validation loss: {loss}. Model successfully saved!")
 
 
 def main():

@@ -1,5 +1,5 @@
 import os
-
+from enum import Enum
 import numpy as np
 import pandas as pd
 import torch
@@ -9,19 +9,36 @@ from torch.utils.data import Dataset
 from utils import fen_to_vector
 
 
+class Split(Enum):
+    TRAIN = 'train'
+    TEST = 'test'
+    VALID = 'val'
+
+
 class ChessDataset(Dataset):
     """
     Constructor. This function should take in a file path where the root directory of the dataset lies, as long
     with some transforms that are to be done on the data.
     """
 
-    def __init__(self, root_path, transform=None, target_transform=None):
-        self.df = pd.read_csv(root_path)
+    def __init__(self, root_path, transform=None, target_transform=None, split=Split.TEST):
+        if not isinstance(split, Split):
+            assert ValueError("Wrong split type")
+        path = os.path.join(root_path, split.value)
+
+        try:
+            self.df = pd.read_csv(path)
+        except:
+            FileNotFoundError("No file found at {}".format(path))
+        else:
+            pass
+
         self.positions = self.df["fen"].apply(fen_to_vector)
         # normalize cps to [0, 1]
+        # TODO: use softmax instead? Not sure if this is a good idea
         self.cps = np.array(self.df["cp"])
         self.cps -= np.min(self.cps)
-        self.cps *= (1/np.max(self.cps))
+        self.cps *= (1 / np.max(self.cps))
 
         self.transform = transform
         self.target_transform = target_transform
@@ -50,6 +67,7 @@ class ChessDataset(Dataset):
 
 
 if __name__ == '__main__':
+    print(Split.TEST.value)
     # testing
     file_path = 'cleaned_data_1000.csv'
     train_transform = torch.tensor
