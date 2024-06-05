@@ -2,8 +2,16 @@ import chess
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+
+
+# after output from our prediction, we want to convert back to cp
+# using max and min from original dataset
+def convert_to_cp(pred, min, max):
+    return (pred*max)+min
+
 
 
 def plot_loss_over_epochs(model_path):
@@ -23,17 +31,17 @@ def plot_loss_over_epochs(model_path):
 
 
 def calculate_validation_loss_epoch(model, device, val_loader):
+    model.eval()
     loop = tqdm(val_loader)
     losses = []
 
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(loop):
-            data, target = data.to(device), target.to(device)
+            data, target = data.to(device), target.float().unsqueeze(1).to(device)
             predictions = model(data)
             loss = nn.MSELoss()(predictions, target)
             losses.append(loss)
-    return sum(losses)/len(losses) if losses else 0
-
+    return sum(losses) / len(losses) if losses else 0
 
 
 def bitboards_to_array(bb: np.ndarray) -> np.ndarray:
@@ -73,7 +81,7 @@ def fen_to_vector(fen_string):
         white & board.kings,
         ], dtype=np.uint64)
 
-    board_array = bitboards_to_array(bitboards) # 12 x 8 x 8
+    board_array = bitboards_to_array(bitboards)  # 12 x 8 x 8
 
     arr = board_array.reshape(1, 768)
     arr = arr[0]

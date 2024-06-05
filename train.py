@@ -1,4 +1,5 @@
 import torch
+import chess
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader
@@ -10,7 +11,7 @@ import torch.optim as optim
 # local imports
 from model import StockwishEvalMLP
 from dataset import ChessDataset, Split
-from utils import calculate_validation_loss_epoch
+from utils import calculate_validation_loss_epoch, convert_to_cp
 
 # Hyper parameters
 LEARNING_RATE = 1e-3
@@ -21,7 +22,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 2
 NUM_EPOCHS = 40
 PIN_MEMORY = True
-LOAD_MODEL = False
+LOAD_MODEL = True
 ROOT_DIR = "data"
 MODEL_PATH = "drive/MyDrive/model_chess.pth"
 
@@ -32,6 +33,33 @@ NUM_HIDDEN = 2048  # from paper
 # Globals
 epoch_num = 0
 losses = []
+
+
+def visualize_results(model: StockwishEvalMLP, root_path, num_results):
+    # need to set model to eval mode
+    model.eval()
+    # loading in val dataset with fens so that we can visualize results
+    transform = lambda x: (torch.tensor(x)).float()
+    val_ds = ChessDataset(root_path=root_path, transform=transform, split=Split.VALID, return_fen=True)
+    print(val_ds.min)
+    print(val_ds.max)
+
+    for i in range(num_results):
+        data, target, fen = val_ds[i]
+        data = data.unsqueeze(0).to(device=DEVICE)
+        #target = target.float().unsqueeze(1).to(device=DEVICE)
+        print(data.size())
+        pred = model(data).item()
+        loss = (pred - target) ** 2
+        cp_pred = convert_to_cp(pred, val_ds.min, val_ds.max)
+        cp_target = convert_to_cp(target, val_ds.min, val_ds.max)
+        board = chess.Board(fen)
+        #display(board)
+        print(board)
+        print(f"MSE Loss: {loss}, Predicted CP: {cp_pred}, Actual CP: {cp_target}")
+    model.train()
+
+
 
 def get_loaders(
         root_dir,
@@ -65,14 +93,14 @@ def get_loaders(
     return train_loader, val_loader
 
 
-""" 
+"""
 Does one epoch of training.
 """
 
 def train(train_loader, val_loader, model, optimizer, loss_fn, scaler):
     global epoch_num
     global losses
-
+    model.train()
     loop = tqdm(train_loader)
 
     for batch_idx, (data, targets) in enumerate(loop):
@@ -121,8 +149,8 @@ def main():
     loss_fn = nn.MSELoss()  # the paper doesn't explicitly say which loss fn, assuming its a simple MSE loss
     # in paper there is an epsilon parameter of 1e-8, but I am not sure if torch SGD has this parameter
     optimizer = optim.SGD(params=model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, nesterov=NESTEROV)
-    train_loader, val_loader = get_loaders(ROOT_DIR, BATCH_SIZE, train_transform, target_transform, NUM_WORKERS,
-                                           PIN_MEMORY)
+    #train_loader, val_loader = get_loaders(ROOT_DIR, BATCH_SIZE, train_transform, target_transform, NUM_WORKERS,
+    #                                      PIN_MEMORY)
 
     if LOAD_MODEL:
         # Loading a previous stored model from MODEL_PATH variable
@@ -133,9 +161,11 @@ def main():
         losses = checkpoint['loss_values']
         print("Model successfully loaded!")
 
-    scaler = torch.cuda.amp.GradScaler()
-    for epoch in range(NUM_EPOCHS - epoch_num):
-        train(train_loader, val_loader, model, optimizer, loss_fn, scaler)
+    visualize_results(model, ROOT_DIR, 10)
+
+    #scaler = torch.cuda.amp.GradScaler()
+    #for epoch in range(NUM_EPOCHS - epoch_num):
+    #    train(train_loader, val_loader, model, optimizer, loss_fn, scaler)
 
 
 if __name__ == '__main__':

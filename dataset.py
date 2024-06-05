@@ -21,24 +21,21 @@ class ChessDataset(Dataset):
     with some transforms that are to be done on the data.
     """
 
-    def __init__(self, root_path, transform=None, target_transform=None, split=Split.TEST):
+    def __init__(self, root_path, transform=None, target_transform=None, split=Split.TEST, return_fen=False):
         if not isinstance(split, Split):
             assert ValueError("Wrong split type")
-        path = os.path.join(root_path, split.value)
-
-        try:
-            self.df = pd.read_csv(path)
-        except:
-            FileNotFoundError("No file found at {}".format(path))
-        else:
-            pass
-
+        path = os.path.join(root_path, f"data_{split.value}.csv")
+        self.df = pd.read_csv(path)
+        self.fen = self.df["fen"]
+        self.return_fen = return_fen
         self.positions = self.df["fen"].apply(fen_to_vector)
-        # normalize cps to [0, 1]
+        # normalize cps to [0, 1] using min max scaling
         # TODO: use softmax instead? Not sure if this is a good idea
         self.cps = np.array(self.df["cp"])
-        self.cps -= np.min(self.cps)
-        self.cps *= (1 / np.max(self.cps))
+        self.min = np.min(self.cps)
+        self.cps -= self.min
+        self.max = np.max(self.cps)
+        self.cps *= (1 / self.max)
 
         self.transform = transform
         self.target_transform = target_transform
@@ -63,7 +60,11 @@ class ChessDataset(Dataset):
             position = self.transform(position)
         if self.target_transform:
             cp = self.target_transform(cp)
-        return position, cp
+
+        if self.return_fen:
+            return position, cp, self.fen[idx]
+        else:
+            return position, cp
 
 
 if __name__ == '__main__':
