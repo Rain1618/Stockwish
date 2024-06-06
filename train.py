@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
+from importlib import reload
 
 
 # local imports
@@ -13,14 +14,16 @@ from model import StockwishEvalMLP
 from dataset import ChessDataset, Split
 from utils import calculate_validation_loss_epoch, convert_to_cp
 
+
+
 # Hyper parameters
-LEARNING_RATE = 1e-3
-MOMENTUM = 0.7
+LEARNING_RATE = 1e-2 # modified from 1e-3
+MOMENTUM = 0.9 # modified from 0.7
 NESTEROV = True
-BATCH_SIZE = 256
+BATCH_SIZE = 1024 # modified from 256
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 2
-NUM_EPOCHS = 40
+NUM_EPOCHS = 80
 PIN_MEMORY = True
 LOAD_MODEL = True
 ROOT_DIR = "data"
@@ -33,7 +36,7 @@ NUM_HIDDEN = 2048  # from paper
 # Globals
 epoch_num = 0
 losses = []
-
+valid_losses = []
 
 def visualize_results(model: StockwishEvalMLP, root_path, num_results):
     # need to set model to eval mode
@@ -54,7 +57,7 @@ def visualize_results(model: StockwishEvalMLP, root_path, num_results):
         cp_pred = convert_to_cp(pred, val_ds.min, val_ds.max)
         cp_target = convert_to_cp(target, val_ds.min, val_ds.max)
         board = chess.Board(fen)
-        #display(board)
+        #display(board) for colab
         print(board)
         print(f"MSE Loss: {loss}, Predicted CP: {cp_pred}, Actual CP: {cp_target}")
     model.train()
@@ -100,14 +103,18 @@ Does one epoch of training.
 def train(train_loader, val_loader, model, optimizer, loss_fn, scaler):
     global epoch_num
     global losses
+    global valid_losses
     model.train()
+
     loop = tqdm(train_loader)
 
     for batch_idx, (data, targets) in enumerate(loop):
-        batch_losses = []
-        data = data.to(device=DEVICE)
-        targets = targets.float().unsqueeze(1).to(device=DEVICE)
 
+        batch_losses = []
+        data = data.squeeze(1).to(device=DEVICE) #[b_size, 768]
+        #print(data)
+        #print(data.size())
+        targets = targets.float().unsqueeze(1).to(device=DEVICE) #[b_size, 1]
         # forward
         with torch.cuda.amp.autocast():
             predictions = model(data)
@@ -126,32 +133,30 @@ def train(train_loader, val_loader, model, optimizer, loss_fn, scaler):
     epoch_num += 1
     avg_epoch_loss =sum(batch_losses)/len(batch_losses)
     losses.append(avg_epoch_loss)
+    # we should keep track of our validation losses as well
+    loss = calculate_validation_loss_epoch(model, DEVICE, val_loader)
+    valid_losses.append(loss)
+    print(f"Epoch {epoch_num} completed. Avg. Training loss: {avg_epoch_loss} Avg. validation loss: {loss}. Model successfully saved!")
     torch.save({
         'model_state_dict': model.state_dict(),
         'optim_state_dict': optimizer.state_dict(),
         'epoch': epoch_num,
         'loss_values': losses,
+        'valid_losses': valid_losses,
     }, MODEL_PATH)
-
-    # we should keep track of our validation losses as well
-    loss = calculate_validation_loss_epoch(model, DEVICE, val_loader)
-    print(f"Epoch {epoch_num} completed. Avg. validation loss: {loss}. Model successfully saved!")
-
 
 def main():
     global epoch_num
     global losses
-    train_transform = lambda x: (torch.tensor(x)).float()
-    # if we want to convert evals from centipawns to pure evaluation
-    target_transform = None
-    #target_transform = None
-    model = StockwishEvalMLP(num_features=NUM_FEATURES, num_units_hidden=NUM_HIDDEN, num_classes=1).to(DEVICE)
-    loss_fn = nn.MSELoss()  # the paper doesn't explicitly say which loss fn, assuming its a simple MSE loss
-    # in paper there is an epsilon parameter of 1e-8, but I am not sure if torch SGD has this parameter
-    optimizer = optim.SGD(params=model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, nesterov=NESTEROV)
-    #train_loader, val_loader = get_loaders(ROOT_DIR, BATCH_SIZE, train_transform, target_transform, NUM_WORKERS,
-    #                                      PIN_MEMORY)
+    global valid_losses
 
+    train_transform = lambda x: (torch.tensor(x)).float()
+    target_transform = None
+    train_loader, val_loader = get_loaders(ROOT_DIR, BATCH_SIZE, train_transform, target_transform, NUM_WORKERS,
+                                           PIN_MEMORY)
+    loss_fn = nn.MSELoss()
+    model = StockwishEvalMLP(num_features=NUM_FEATURES, num_units_hidden=NUM_HIDDEN, num_classes=1).to(DEVICE)
+    optimizer = optim.SGD(params=model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, nesterov=NESTEROV)
     if LOAD_MODEL:
         # Loading a previous stored model from MODEL_PATH variable
         checkpoint = torch.load(MODEL_PATH)
@@ -159,14 +164,12 @@ def main():
         optimizer.load_state_dict(checkpoint['optim_state_dict'])
         epoch_num = checkpoint['epoch']
         losses = checkpoint['loss_values']
+        valid_losses = checkpoint['valid_losses']
         print("Model successfully loaded!")
 
-    visualize_results(model, ROOT_DIR, 10)
-
-    #scaler = torch.cuda.amp.GradScaler()
-    #for epoch in range(NUM_EPOCHS - epoch_num):
-    #    train(train_loader, val_loader, model, optimizer, loss_fn, scaler)
-
+    scaler = torch.cuda.amp.GradScaler()
+    for epoch in range(NUM_EPOCHS - epoch_num):
+        train(train_loader, val_loader, model, optimizer, loss_fn, scaler)
 
 if __name__ == '__main__':
     main()

@@ -19,11 +19,15 @@ def plot_loss_over_epochs(model_path):
     checkpoint = torch.load(model_path, map_location=device)
     epoch_num = checkpoint['epoch']
     losses = checkpoint['loss_values']
+    val_losses = checkpoint['valid_losses']
     print("Model successfully loaded!")
     assert epoch_num == len(losses)
     losses_n = [loss.item() for loss in losses]
+    val_n = [val_losses.item() for v_loss in val_losses]
     fig, ax = plt.subplots()
     ax.plot(range(len(losses_n)), losses_n)
+    ax.plot(range(len(val_n)), val_n)
+    ax.legend(['Training', 'Validation'])
     ax.set_title('Losses over epochs')
     ax.set_ylabel('Loss (MSE)')
     ax.set_xlabel('Epoch')
@@ -37,7 +41,7 @@ def calculate_validation_loss_epoch(model, device, val_loader):
 
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(loop):
-            data, target = data.to(device), target.float().unsqueeze(1).to(device)
+            data, target = data.squeeze(1).to(device), target.float().unsqueeze(1).to(device)
             predictions = model(data)
             loss = nn.MSELoss()(predictions, target)
             losses.append(loss)
@@ -51,7 +55,6 @@ def bitboards_to_array(bb: np.ndarray) -> np.ndarray:
     b = np.unpackbits(b, bitorder="little")
     return b.reshape(-1, 8, 8)
 
-
 def fen_to_vector(fen_string):
     """
     Converts a FEN string to a 768-bit bitboard vector representation.
@@ -60,7 +63,7 @@ def fen_to_vector(fen_string):
         fen_string: The FEN string representing the chess position.
 
     Returns:
-        A (768,0) size vector representing the chess position
+        A 12 x 8 x 8 numpy array representing the bitboard vector.
     """
     board = chess.Board(fen_string)
 
@@ -81,9 +84,22 @@ def fen_to_vector(fen_string):
         white & board.kings,
         ], dtype=np.uint64)
 
-    board_array = bitboards_to_array(bitboards)  # 12 x 8 x 8
+    # we need to encode the information for which turn it is
+    board_array = bitboards_to_array(bitboards).astype('int8')
+    if board.turn == chess.WHITE:
+        # change all of the arrays of black pieces to -1
+        for i in range(6):
+            board_array[i] *= -1
+    else:
+        for i in range(6, 12):
+            # change all of the arrays of white pieces to -1
+            board_array[i] *= -1
 
+    return array_to_vec(board_array)
+
+def array_to_vec(board_array):
     arr = board_array.reshape(1, 768)
-    arr = arr[0]
-
     return arr
+
+
+
