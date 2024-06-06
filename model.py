@@ -10,35 +10,23 @@ class StockwishEvalMLP(nn.Module):
 
         # the architecture is 3 hidden layers, each with 2048 units
         lin = nn.Linear(num_features, num_units_hidden)
-        #lin.weight.detach().normal_(0.0, 1.0)
         self.hidden_1 = nn.Sequential(
             lin,
             nn.BatchNorm1d(num_units_hidden),
             nn.ELU(inplace=True),
         )
-        # initialize weights to normal with zero mean and unit variance
-        #self.hidden_1.weight.detach().normal_(0.0, 1.0)
-        #self.hidden_1.bias.detach().zero_()
         lin = nn.Linear(num_units_hidden, num_units_hidden)
-        #lin.weight.detach().normal_(0.0, 1.0)
         self.hidden_2 = nn.Sequential(
             lin,
             nn.BatchNorm1d(num_units_hidden),
             nn.ELU(inplace=True),
         )
-        # initialize weights to normal with zero mean and unit variance
-        #self.hidden_2.weight.detach().normal_(0.0, 1.0)
-        #self.hidden_2.bias.detach().zero_()
         lin = nn.Linear(num_units_hidden, num_units_hidden)
-        #lin.weight.detach().normal_(0.0, 1.0)
         self.hidden_3 = nn.Sequential(
             lin,
             nn.BatchNorm1d(num_units_hidden),
             nn.ELU(inplace=True),
         )
-        # initialize weights to normal with zero mean and unit variance
-        #self.hidden_3.weight.detach().normal_(0.0, 1.0)
-        #self.hidden_3.bias.detach().zero_()
 
         # added sigmoid hopefully makes the training better
         self.linear_out = nn.Sequential(
