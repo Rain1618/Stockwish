@@ -13,6 +13,7 @@ class Split(Enum):
     TRAIN = 'train'
     TEST = 'test'
     VALID = 'val'
+    SMOKE = 'smoke'
 
 
 class ChessDataset(Dataset):
