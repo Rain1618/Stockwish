@@ -3,10 +3,12 @@ import torch
 from model import StockwishEvalMLP, StockwishEvalMLP_Mod
 import numpy as np
 import chess
+import chess.svg
 import random
 from utils import fen_to_vector, convert_to_cp
 
-MODEL_PATH = "drive/MyDrive/model_chess_4.pth"  # model_4 is the best one so far
+#MODEL_PATH = "drive/MyDrive/model_chess_4.pth"  # model_4 is the best one so far
+MODEL_PATH = "models/model_chess_4.pth"
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_FEATURES = 8 * 8 * 12  # bitmap representation of chessboard is 8 x 8 x num_pieces = 8x8x12
 NUM_HIDDEN = 2048  # changed from 2048
@@ -38,7 +40,7 @@ class Node:
         self.parent_action = parent_action
         self.children = [] #List of Node of next possible actions
 
-        self.ucb = 0
+        #self.ucb = 0
         self.N = 0 #Num of times parent node has been visited
         self.n = 0 #Num of times current node has been visited
         self.v = 0 #Exploitation factor: higher v = higher success rate
@@ -48,14 +50,22 @@ class Node:
         # TODO: do we need to normalize value_network to (-1, 1)?
         return value_network(self.state)
 
-def ucb(curr_node, c=1.5):
-    return curr_node.v + c*np.sqrt(np.log(curr_node.N + 1**(-10))/(curr_node.n + 1**(-10))) #c is the exploration constant, higher = more random moves
+    def is_leaf(self):
+        return len(self.children) == 0
 
-def selection(curr_node):
+    def outcome(self):
+        return chess.Board(self.state).outcome()
+
+    def ucb(self, c=2):
+        return self.v + c*np.sqrt(np.log(self.parent.n + 1**(-10))/(self.n + 1**(-10))) # c is the exploration constant, higher = more random moves
+
+def selection(curr_node, c=2):
     # Select the child node with the highest UCB value
     best_child = curr_node.children[0]
     for child in curr_node.children:
-        if child.ucb > best_child.ucb:
+        if child.ucb(c=c) > best_child.ucb(c=c):
+            #print(child.ucb())
+            #print(best_child.ucb())
             best_child = child
     return best_child
 
@@ -74,13 +84,15 @@ def expansion(curr_node):
 
 
 def rollback(curr_node, reward): #reward = 1 if win, 0 if draw, -1 if loss
-    curr_node.n += 1
-    curr_node.v += reward
-    print(chess.Board(curr_node.state))
-    print(f"Current node reward {reward} ^")
+    #print(chess.Board(curr_node.state))
+    #print(f"Current node reward {reward} ^")
     while(curr_node.parent != None):
+        curr_node.n += 1
+        curr_node.v = curr_node.v+reward if chess.Board(curr_node.state).turn == chess.WHITE else curr_node.v-reward
         curr_node.N += 1
         curr_node = curr_node.parent
+    curr_node.n += 1
+    curr_node.v += reward
     return curr_node
 
 
@@ -144,7 +156,7 @@ def find_next_best_legal_position(model, board, epsilon):
     #print(best_eval)
 
 
-def simulate(initial_node, model, max_iterations=100, epsilon=0.3, display_board=False, seed=0):
+def simulate(initial_node, model, max_iterations=100, epsilon=0.8, display_board=False, seed=0):
     """
     initial_position: Node representing our initial position
     model: StockWishMLP class model which predicts value of any position
@@ -166,28 +178,40 @@ def simulate(initial_node, model, max_iterations=100, epsilon=0.3, display_board
     iter_index = 0
     while (True):
         iter_index += 1
-        next_position = find_next_best_legal_position(model, board, epsilon)
-        # next_node = Node(next_position, current_node)
-        # current_node.children.append(next_node)
-        # current_node = next_node
+        find_next_best_legal_position(model, board, epsilon)
+        #next_node = Node(next_position, current_node)
+        #current_node.children.append(next_node)
+        #current_node = next_node
         if display_board:
             #display(board)
             board
         if iter_index >= max_iterations or board.outcome():
             break
-    print(board.outcome())
+    #print(board.outcome())
+    if not board.outcome():
+        # TODO: maybe change this to it returns a score reflecting the position eval
+        eval = get_eval(model, board.fen())
+        if eval > 6:
+            return 1
+        elif eval < -6:
+            return -1
+        else:
+            return 0
+
     if board.outcome().winner:
-        return 1, current_node if board.outcome().winner else -1, current_node
+        return 1 if board.outcome().winner else -1
     else:
         # we want to avoid draws by repetition or 50 move rule
         if board.outcome().termination == chess.Termination.FIVEFOLD_REPETITION or board.outcome().termination == chess.Termination.FIFTY_MOVES:
             mat_balance = material_balance(board)
             if mat_balance >= 8:
-                return 1, current_node
+                return 1
             elif mat_balance <= -8:
-                return -1, current_node
+                return -1
             else:
-                return 0, current_node
+                return 0
+        else:
+            return 0
 
 
 
@@ -195,30 +219,52 @@ initial_position = Node("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 
 model = load_model(MODEL_PATH, type=StockwishEvalMLP)
 
 
-def run_mcts(initial_state= chess.STARTING_FEN, num_iterations=10):
+def run_mcts(initial_state=chess.STARTING_FEN, num_iterations=10):
     # load model
     model = load_model(MODEL_PATH, type=StockwishEvalMLP)
-    # create new leaf node
-    root = Node(initial_state)
-    node = root
-    expansion(node)
-    selected_node = selection(node)
-    result, node = simulate(selected_node.state, model)
-    rollback(node)
-    for child in node.children:
-        pass
+    # # create new leaf node
+    # root = Node(initial_state)
+    # node = root
+    # expansion(node)
+    # selected_node = selection(node)
+    # result, node = simulate(selected_node.state, model)
+    # rollback(node)
+    # for child in node.children:
+    #     pass
 
     # if node.is_leaf_node():
     #     if node.num_visits == 0:
     #         result = rollout()
-    node = Node(initial_state)
+    root = Node(initial_state)
+
     for i in range(num_iterations):
         # the selection function selects a node to run the simulation on
         # based on UCT and does expansions when needed
-        selected_node = selection(node)
-        # do simulation of obtain result (-1, 0, 1) and terminal node
-        result, node = simulate(selected_node.state, model)
-        # rollback from selected node using the result
-        rollback(selected_node, result)
+        node = root
+        while not node.is_leaf():
+            best_child = selection(node)
+            node = best_child
+        # if we reach here it means we have reached a leaf node, expand
+        expansion(node)
+        best_child = selection(node)
+        node = best_child
+        if node.outcome():
+            if node.outcome().winner:
+                result = 1 if node.outcome().winner else -1
+            else:
+                result = 0
+            rollback(node, result)
+            continue
+        else:
+            result = simulate(node, model)
+            #rollback from selected node using the result
+            print(result)
+            rollback(node, result)
+        print(f"Iteration no. {i} done. Result of simulation: {result}")
+    return selection(root, c=0)
 
-    pass
+if __name__ == "__main__":
+    fen = "rnbq1bnr/pppkpppN/7p/3p4/8/8/PPPPPPPP/RNBQKB1R w KQ - 2 4"
+    node = run_mcts(initial_state=fen, num_iterations=10)
+    board = chess.Board(node.state)
+    chess.svg.board(board)
