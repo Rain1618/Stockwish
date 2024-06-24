@@ -219,9 +219,7 @@ initial_position = Node("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 
 model = load_model(MODEL_PATH, type=StockwishEvalMLP)
 
 
-def run_mcts(initial_state=chess.STARTING_FEN, num_iterations=10):
-    # load model
-    model = load_model(MODEL_PATH, type=StockwishEvalMLP)
+def run_mcts(model, initial_state=chess.STARTING_FEN, num_iterations=10):
     # # create new leaf node
     # root = Node(initial_state)
     # node = root
@@ -265,6 +263,8 @@ def run_mcts(initial_state=chess.STARTING_FEN, num_iterations=10):
 
 if __name__ == "__main__":
     fen = "rnbq1bnr/pppkpppN/7p/3p4/8/8/PPPPPPPP/RNBQKB1R w KQ - 2 4"
-    node = run_mcts(initial_state=fen, num_iterations=10)
+    # load model
+    model = load_model(MODEL_PATH, type=StockwishEvalMLP)
+    node = run_mcts(model, initial_state=fen, num_iterations=10)
     board = chess.Board(node.state)
     chess.svg.board(board)
