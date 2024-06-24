@@ -41,7 +41,7 @@ def calculate_validation_loss_epoch(model, device, val_loader):
 
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(loop):
-            data, target = data.squeeze(1).to(device), target.float().unsqueeze(1).to(device)
+            data, target = data.squeeze(1).float().to(device), target.float().unsqueeze(1).to(device)
             predictions = model(data)
             loss = nn.MSELoss()(predictions, target)
             losses.append(loss)
@@ -100,6 +100,9 @@ def fen_to_vector(fen_string):
 def array_to_vec(board_array):
     arr = board_array.reshape(1, 768)
     return arr
+
+if __name__ == '__main__':
+    print(fen_to_vector(chess.STARTING_FEN))
 
 
 
