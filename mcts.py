@@ -63,7 +63,7 @@ def selection(curr_node, c=2):
     # Select the child node with the highest UCB value
     best_child = curr_node.children[0]
     for child in curr_node.children:
-        if child.ucb(c=c) > best_child.ucb(c=c):
+        if child.ucb(c) > best_child.ucb(c):
             #print(child.ucb())
             #print(best_child.ucb())
             best_child = child
@@ -155,8 +155,14 @@ def find_next_best_legal_position(model, board, epsilon):
         board.push(move)
     #print(best_eval)
 
+def select_best_move(node, turn):
+    list_of_v = [child.v for child in node.children]
+    dict_of_v = {child.v: child for child in node.children}
+    #return dict_of_v[min(list_of_v)] if turn else dict_of_v[max(list_of_v)]
+    return dict_of_v[min(list_of_v)]
 
-def simulate(initial_node, model, max_iterations=100, epsilon=0.8, display_board=False, seed=0):
+
+def simulate(initial_node, model, max_iterations=100, epsilon=1.0, display_board=False, seed=0):
     """
     initial_position: Node representing our initial position
     model: StockWishMLP class model which predicts value of any position
@@ -175,6 +181,7 @@ def simulate(initial_node, model, max_iterations=100, epsilon=0.8, display_board
     current_node = initial_node
     current_position = initial_node.state
     board = chess.Board(current_position)
+
     iter_index = 0
     while (True):
         iter_index += 1
@@ -188,17 +195,19 @@ def simulate(initial_node, model, max_iterations=100, epsilon=0.8, display_board
         if iter_index >= max_iterations or board.outcome():
             break
     #print(board.outcome())
-    if not board.outcome():
+    #display(board)
+    if board.outcome() is None:
         # TODO: maybe change this to it returns a score reflecting the position eval
+        #return 0
         eval = get_eval(model, board.fen())
-        if eval > 6:
+        if eval > 500:
             return 1
-        elif eval < -6:
+        elif eval < -500:
             return -1
         else:
             return 0
 
-    if board.outcome().winner:
+    if board.outcome().winner is not None:
         return 1 if board.outcome().winner else -1
     else:
         # we want to avoid draws by repetition or 50 move rule
@@ -214,12 +223,10 @@ def simulate(initial_node, model, max_iterations=100, epsilon=0.8, display_board
             return 0
 
 
-
-initial_position = Node("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-model = load_model(MODEL_PATH, type=StockwishEvalMLP)
-
-
 def run_mcts(model, initial_state=chess.STARTING_FEN, num_iterations=10):
+    # load model
+    if model is None:
+        model = load_model(MODEL_PATH, type=StockwishEvalMLP)
     # # create new leaf node
     # root = Node(initial_state)
     # node = root
@@ -242,24 +249,31 @@ def run_mcts(model, initial_state=chess.STARTING_FEN, num_iterations=10):
         while not node.is_leaf():
             best_child = selection(node)
             node = best_child
-        # if we reach here it means we have reached a leaf node, expand
-        expansion(node)
-        best_child = selection(node)
-        node = best_child
+
+        # check if node is a terminal node
         if node.outcome():
-            if node.outcome().winner:
+            if node.outcome().winner is not None:
                 result = 1 if node.outcome().winner else -1
             else:
                 result = 0
+            #display(chess.Board(node.state))
+            print(f"Iteration no. {i} done. Result of simulation: {result}")
             rollback(node, result)
             continue
-        else:
-            result = simulate(node, model)
-            #rollback from selected node using the result
-            print(result)
-            rollback(node, result)
+        # if we reach here it means we have reached a leaf node, expand
+        expansion(node)
+        # select best child and simulate
+        best_child = selection(node)
+        node = best_child
+        result = simulate(node, model)
+        #rollback from selected node using the result
+        #print(result)
+        rollback(node, result)
         print(f"Iteration no. {i} done. Result of simulation: {result}")
-    return selection(root, c=0)
+    for child in root.children:
+        #display(chess.Board(child.state))
+        print(f"UCB: {child.ucb(c=0)}")
+    return select_best_move(root, chess.Board(root.state).turn)
 
 if __name__ == "__main__":
     fen = "rnbq1bnr/pppkpppN/7p/3p4/8/8/PPPPPPPP/RNBQKB1R w KQ - 2 4"
