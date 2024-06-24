@@ -48,7 +48,7 @@ class Node:
         # TODO: do we need to normalize value_network to (-1, 1)?
         return value_network(self.state)
 
-def ucb(curr_node, c=2):
+def ucb(curr_node, c=1.5):
     return curr_node.v + c*np.sqrt(np.log(curr_node.N + 1**(-10))/(curr_node.n + 1**(-10))) #c is the exploration constant, higher = more random moves
 
 def selection(curr_node):
@@ -167,9 +167,9 @@ def simulate(initial_node, model, max_iterations=100, epsilon=0.3, display_board
     while (True):
         iter_index += 1
         next_position = find_next_best_legal_position(model, board, epsilon)
-        next_node = Node(next_position, current_node)
-        current_node.children.append(next_node)
-        current_node = next_node
+        # next_node = Node(next_position, current_node)
+        # current_node.children.append(next_node)
+        # current_node = next_node
         if display_board:
             #display(board)
             board
