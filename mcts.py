@@ -47,7 +47,6 @@ class Node:
 
     def value(self, value_network):
         # value_network should be the trained MLP model which can give a value between (-1, 1) for any given position
-        # TODO: do we need to normalize value_network to (-1, 1)?
         return value_network(self.state)
 
     def is_leaf(self):
@@ -56,10 +55,11 @@ class Node:
     def outcome(self):
         return chess.Board(self.state).outcome()
 
-    def ucb(self, c=2):
-        return self.v + c*np.sqrt(np.log(self.parent.n + 1**(-10))/(self.n + 1**(-10))) # c is the exploration constant, higher = more random moves
+    def ucb(self, c=np.sqrt(2)):
+       # return self.v + c*np.sqrt(np.log(self.parent.n + 1**(-10))/(self.n + 1**(-10))) # c is the exploration constant, higher = more random moves
+        return -self.v/(self.n+1**(-10)) + c*np.sqrt(np.log(self.parent.n + 1**(-10))/(self.n + 1**(-10)))
 
-def selection(curr_node, c=2):
+def selection(curr_node, c=np.sqrt(2)):
     # Select the child node with the highest UCB value
     best_child = curr_node.children[0]
     for child in curr_node.children:
@@ -181,6 +181,12 @@ def simulate(initial_node, model, max_iterations=100, epsilon=1.0, display_board
     current_node = initial_node
     current_position = initial_node.state
     board = chess.Board(current_position)
+    # check if terminal
+    if board.outcome() is not None:
+        if board.outcome().winner is not None:
+            return 1 if board.outcome().winner else -1
+        else:
+            return 0
 
     iter_index = 0
     while (True):
@@ -200,12 +206,17 @@ def simulate(initial_node, model, max_iterations=100, epsilon=1.0, display_board
         # TODO: maybe change this to it returns a score reflecting the position eval
         #return 0
         eval = get_eval(model, board.fen())
-        if eval > 500:
-            return 1
-        elif eval < -500:
-            return -1
-        else:
-            return 0
+        return float(eval/1000.0)
+
+        # if abs(eval) > 500:
+        #     return float(eval/1000.0)
+
+        # if eval > 500:
+        #     return 1
+        # elif eval < -500:
+        #     return -1
+        # else:
+        #     return 0
 
     if board.outcome().winner is not None:
         return 1 if board.outcome().winner else -1
@@ -223,7 +234,7 @@ def simulate(initial_node, model, max_iterations=100, epsilon=1.0, display_board
             return 0
 
 
-def run_mcts(model, initial_state=chess.STARTING_FEN, num_iterations=10):
+def run_mcts(model, initial_node=Node(chess.STARTING_FEN), num_iterations=10):
     # load model
     if model is None:
         model = load_model(MODEL_PATH, type=StockwishEvalMLP)
@@ -240,7 +251,7 @@ def run_mcts(model, initial_state=chess.STARTING_FEN, num_iterations=10):
     # if node.is_leaf_node():
     #     if node.num_visits == 0:
     #         result = rollout()
-    root = Node(initial_state)
+    root = initial_node
 
     for i in range(num_iterations):
         # the selection function selects a node to run the simulation on
@@ -260,19 +271,19 @@ def run_mcts(model, initial_state=chess.STARTING_FEN, num_iterations=10):
             print(f"Iteration no. {i} done. Result of simulation: {result}")
             rollback(node, result)
             continue
-        # if we reach here it means we have reached a leaf node, expand
+        # if we reach here it means we have reached a leaf node, simulate
         expansion(node)
         # select best child and simulate
         best_child = selection(node)
         node = best_child
-        result = simulate(node, model)
+        result = simulate(node, model, max_iterations=5)
         #rollback from selected node using the result
         #print(result)
         rollback(node, result)
         print(f"Iteration no. {i} done. Result of simulation: {result}")
-    for child in root.children:
-        #display(chess.Board(child.state))
-        print(f"UCB: {child.ucb(c=0)}")
+    # for child in root.children:
+    #      display(chess.Board(child.state))
+    #      print(f"UCB: {child.ucb(c=0)}")
     return select_best_move(root, chess.Board(root.state).turn)
 
 if __name__ == "__main__":
